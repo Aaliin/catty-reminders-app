@@ -9,7 +9,6 @@ env:
   SERVER_HOST: "course.prafdin.ru"
   SERVER_USER: "user"
   SSH_PORT: 2469
-  APP_DIR: "/home/user/catty-reminders-app"
 
 jobs:
   deploy:
@@ -27,79 +26,34 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
         
-    - name: Configure SSH
+    - name: Simple deploy
       run: |
         mkdir -p ~/.ssh
-        chmod 700 ~/.ssh
         ssh-keyscan -p $SSH_PORT $SERVER_HOST >> ~/.ssh/known_hosts
-        chmod 600 ~/.ssh/known_hosts
         
-    - name: Deploy application
-      run: |
-        echo "🚀 Starting deployment..."
+        echo "🚀 Simple deployment..."
         
-        ssh -T -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'REMOTE_SCRIPT'
-        set -e
-        
-        APP_DIR="/home/user/catty-reminders-app"
-        SERVICE_NAME="catty-reminders-app"
-        PORT="8181"
-        
-        echo "📥 Updating repository..."
-        cd "$APP_DIR"
-        git fetch origin
-        git checkout github-actions
-        git reset --hard origin/github-actions
-        
-        echo "📦 Installing Python dependencies..."
-        pip3 install -r requirements.txt --break-system-packages
-        
-        echo "🛑 Stopping previous version..."
-        # Используем systemctl без sudo (если пользователь в группе systemd)
-        systemctl --user stop "$SERVICE_NAME" 2>/dev/null || true
-        pkill -f "uvicorn" 2>/dev/null || true
-        sleep 2
-        
-        echo "⚙️ Configuring systemd service..."
-        # Создаем service файл в пользовательской директории
-        mkdir -p ~/.config/systemd/user/
-        cat > ~/.config/systemd/user/"$SERVICE_NAME".service << 'SERVICE_CONFIG'
-        [Unit]
-        Description=Catty Reminders App
-        After=network.target
-
-        [Service]
-        Type=simple
-        WorkingDirectory=/home/user/catty-reminders-app
-        ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8181
-        Restart=always
-        RestartSec=5
-
-        [Install]
-        WantedBy=default.target
-        SERVICE_CONFIG
-        
-        echo "🔄 Starting systemd service..."
-        systemctl --user daemon-reload
-        systemctl --user enable "$SERVICE_NAME"
-        systemctl --user start "$SERVICE_NAME"
-        
-        echo "🔍 Checking service status..."
-        sleep 5
-        if systemctl --user is-active --quiet "$SERVICE_NAME"; then
-          echo "✅ Application started successfully!"
-        else
-          echo "❌ Service failed to start"
-          systemctl --user status "$SERVICE_NAME"
-          exit 1
-        fi
-        
-        echo "🔍 Checking application response..."
-        if curl -s http://localhost:8181/ > /dev/null 2>&1; then
-          echo "✅ Application is responding"
-        else
-          echo "⚠️ Application is running but not responding to requests"
-        fi
-        
-        echo "🎉 Deployment completed successfully!"
-        REMOTE_SCRIPT
+        ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST "
+          cd /home/user/catty-reminders-app
+          git fetch origin
+          git reset --hard origin/github-actions
+          
+          pip3 install -r requirements.txt --break-system-packages
+          
+          pkill -f 'uvicorn' 2>/dev/null || true
+          sleep 2
+          
+          cd /home/user/catty-reminders-app
+          nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8181 > /home/user/app.log 2>&1 &
+          
+          sleep 5
+          if curl -s http://localhost:8181/ > /dev/null; then
+            echo '✅ App deployed and running!'
+            echo '🌐 Available at: http://app.your-id.course.prafdin.ru:8181/'
+          else
+            echo '❌ App failed to start'
+            echo 'Logs:'
+            tail -20 /home/user/app.log
+            exit 1
+          fi
+        "
