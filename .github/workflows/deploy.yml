@@ -65,7 +65,7 @@ jobs:
         sleep 2
         
         echo "⚙️ Configuring systemd service..."
-        sudo tee /etc/systemd/system/$SERVICE_NAME.service > /dev/null <<EOF
+        sudo tee /etc/systemd/system/$SERVICE_NAME.service > /dev/null <<EOL
         [Unit]
         Description=Catty Reminders App
         After=network.target
@@ -80,7 +80,7 @@ jobs:
 
         [Install]
         WantedBy=multi-user.target
-        EOF
+        EOL
         
         echo "🔄 Starting systemd service..."
         sudo systemctl daemon-reload
