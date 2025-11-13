@@ -51,9 +51,12 @@ jobs:
         echo "🛑 Stopping previous version..."
         echo "=== Checking processes on port $PORT ==="
         kill -9 172954 2>/dev/null || echo "PID 172954 not found or already dead"
+        sudo fuser -k $PORT/tcp 2>/dev/null || true
         lsof -ti:$PORT | xargs -r kill -9 2>/dev/null || true
         pkill -9 -f "python.*$PORT" 2>/dev/null || true
         pkill -9 -f "uvicorn.*$PORT" 2>/dev/null || true
+        pkill -9 -u $USER python 2>/dev/null || true
+        pkill -9 -u $USER python3 2>/dev/null || true
         
         echo "⏳ Waiting for processes to terminate..."
         sleep 5
