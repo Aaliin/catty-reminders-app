@@ -26,34 +26,66 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
         
-    - name: Simple deploy
+    - name: Deploy application
       run: |
         mkdir -p ~/.ssh
         ssh-keyscan -p $SSH_PORT $SERVER_HOST >> ~/.ssh/known_hosts
         
-        echo "🚀 Simple deployment..."
+        echo "🚀 Starting deployment without systemd..."
         
-        ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST "
-          cd /home/user/catty-reminders-app
-          git fetch origin
-          git reset --hard origin/github-actions
-          
-          pip3 install -r requirements.txt --break-system-packages
-          
-          pkill -f 'uvicorn' 2>/dev/null || true
-          sleep 2
-          
-          cd /home/user/catty-reminders-app
-          nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8181 > /home/user/app.log 2>&1 &
-          
-          sleep 5
-          if curl -s http://localhost:8181/ > /dev/null; then
-            echo '✅ App deployed and running!'
-            echo '🌐 Available at: http://app.your-id.course.prafdin.ru:8181/'
-          else
-            echo '❌ App failed to start'
-            echo 'Logs:'
-            tail -20 /home/user/app.log
-            exit 1
-          fi
-        "
+        ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'REMOTE_SCRIPT'
+        set -e
+        
+        APP_DIR="/home/user/catty-reminders-app"
+        PORT="8181"
+        
+        echo "📥 Updating repository..."
+        cd "$APP_DIR"
+        git fetch origin
+        git checkout github-actions
+        git reset --hard origin/github-actions
+        
+        echo "📦 Installing Python dependencies..."
+        pip3 install -r requirements.txt --break-system-packages
+        
+        echo "🛑 Stopping previous version..."
+        pkill -f "uvicorn.*8181" 2>/dev/null || true
+        sleep 3
+        
+        echo "🚀 Starting application..."
+        cd "$APP_DIR"
+        nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT > /home/user/app.log 2>&1 &
+        APP_PID=$!
+        echo $APP_PID > /home/user/app.pid
+        
+        echo "⏳ Waiting for startup..."
+        sleep 10
+        
+        echo "🔍 Checking application status..."
+        
+        if ps -p $APP_PID > /dev/null; then
+          echo "✅ Application process is running (PID: $APP_PID)"
+        else
+          echo "❌ Application process died"
+          echo "=== Application logs ==="
+          tail -30 /home/user/app.log
+          exit 1
+        fi
+        
+        # Проверяем HTTP ответ
+        echo "🔍 Testing HTTP response..."
+        if curl -s -f http://localhost:$PORT/ > /dev/null; then
+          echo "✅ Application is responding to HTTP requests"
+          echo "=== Response ==="
+          curl -s http://localhost:$PORT/ | head -2
+        else
+          echo "⚠️ Application running but not responding to HTTP"
+          echo "=== Checking port usage ==="
+          netstat -tlnp | grep ":$PORT" || echo "Port $PORT not found"
+          echo "=== Recent logs ==="
+          tail -20 /home/user/app.log
+        fi
+        
+        echo "🎉 Deployment completed successfully!"
+        echo "🌐 Application available at: http://app.your-id.course.prafdin.ru:$PORT/"
+        REMOTE_SCRIPT
