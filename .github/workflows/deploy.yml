@@ -87,5 +87,5 @@ jobs:
         fi
         
         echo "🎉 Deployment completed successfully!"
-        echo "🌐 Application available at: http://app.your-id.course.prafdin.ru:$PORT/"
+        echo "🌐 Application available at: http://app.shavarina.course.prafdin.ru:$PORT/"
         REMOTE_SCRIPT
