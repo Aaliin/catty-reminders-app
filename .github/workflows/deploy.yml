@@ -36,33 +36,36 @@ jobs:
         ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'REMOTE_SCRIPT'
         set -e
         
-        APP_DIR="/home/user/catty-reminders-app"
         PORT="8181" 
         
-        echo "Stopping systemd services..."
-        sudo systemctl stop catty-reminders-app 2>/dev/null || true
-        systemctl --user stop catty-reminders-app 2>/dev/null || true
+        OCCUPIER_PID=$(lsof -ti:$PORT 2>/dev/null | head -1)
         
-        echo "Killing processes on port $PORT..."
-        sudo pkill -9 -f "uvicorn.*8181" 2>/dev/null || true
-        sudo pkill -9 -f "python.*8181" 2>/dev/null || true
-        
-        echo "Force freeing port $PORT..."
-        sudo fuser -k $PORT/tcp 2>/dev/null || true
-        
-        sleep 5
-        echo "Verifying port $PORT is free..."
-        if lsof -i :$PORT > /dev/null 2>&1; then
-          echo "❌ Port $PORT still occupied, using nuclear option..."
-          OCCUPIER_PID=$(lsof -ti:$PORT | head -1)
-          if [ ! -z "$OCCUPIER_PID" ]; then
-            echo "Killing process $OCCUPIER_PID..."
-            sudo kill -9 $OCCUPIER_PID
-            sleep 3
-          fi
+        if [ -z "$OCCUPIER_PID" ]; then
+          echo "✅ Port $PORT is already free!"
+          exit 0
         fi
         
-        echo "✅ Port $PORT should be free now"
+        echo "Found process $OCCUPIER_PID on port $PORT"
+        
+        echo "=== Process info ==="
+        ps -p $OCCUPIER_PID -o pid,user,cmd || echo "Process info unavailable"
+        
+        kill $OCCUPIER_PID 2>/dev/null || true
+        sleep 5
+        
+        if ps -p $OCCUPIER_PID > /dev/null 2>&1; then
+          kill -9 $OCCUPIER_PID 2>/dev/null || true
+          sleep 3
+        fi
+        
+        if lsof -i :$PORT > /dev/null 2>&1; then
+          echo "❌ Port $PORT still occupied after all attempts"
+          echo "Current occupant:"
+          lsof -i :$PORT
+          echo "This process is managed by a supervisor. We'll work around it."
+        else
+          echo "✅ Port $PORT is now free!"
+        fi
         REMOTE_SCRIPT
 
     - name: Deploy application
