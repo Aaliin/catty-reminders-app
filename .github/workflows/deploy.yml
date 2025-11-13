@@ -24,7 +24,7 @@ jobs:
         target: "/home/user/catty-reminders-app"
         strip_components: 1
 
-    - name: Start application
+    - name: Stop systemd service and start app
       uses: appleboy/ssh-action@v0.1.10
       with:
         host: course.prafdin.ru
@@ -32,13 +32,39 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 2469
         script: |
-          echo "🚀 Starting deployment..."
+          set -e
+          echo "🚀 Stopping systemd service and deploying..."
           cd /home/user/catty-reminders-app
-          pkill -f "uvicorn.*8181" || true
+          
+          echo "🛑 Stopping systemd user services..." 
+          systemctl --user stop catty-app 2>/dev/null || echo "No catty-app service"
+          systemctl --user stop uvicorn 2>/dev/null || echo "No uvicorn service"
+          systemctl --user stop app 2>/dev/null || echo "No app service"
+          systemctl --user stop reminders 2>/dev/null || echo "No reminders service"
+          
+          systemctl --user list-units | grep -E "(uvicorn|8181|catty|app)" | awk '{print $1}' | while read service; do
+            echo "Stopping service: $service"
+            systemctl --user stop "$service" 2>/dev/null || true
+          done
           sleep 3
+          
+          echo "🔍 Checking if port is free..."
+          if netstat -tln | grep :8181 > /dev/null; then
+            echo "❌ Port still occupied, forcing cleanup..."
+            sudo fuser -k 8181/tcp 2>/dev/null || true
+            sleep 3
+          fi
+          
+          echo "📦 Installing dependencies..."
           pip3 install -r requirements.txt --user
+          
+          echo "🚀 Starting application..."
           nohup uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
-          sleep 15
+          echo "Application started"
+          sleep 10
+          
+          echo "📋 Status check:"
+          pgrep -f "uvicorn.*8181" && echo "✅ Process running" || echo "❌ Process failed"
 
     - name: Verify deployment
       uses: appleboy/ssh-action@v0.1.10
@@ -48,34 +74,14 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 2469
         script: |
-          echo "=== 🎯 VERIFICATION ==="
+          echo "=== VERIFICATION ==="
           cd /home/user/catty-reminders-app
           
-          echo "Process check:"
-          if pgrep -f "uvicorn.*8181" > /dev/null; then
-            echo "✅ Process RUNNING: $(pgrep -f 'uvicorn.*8181')"
+          if pgrep -f "uvicorn.*8181" > /dev/null && netstat -tln | grep :8181 > /dev/null; then
+            echo "🎉 SUCCESS! Application running on port 8181"
+            echo "🌐 Access at: http://app.shavarina.course.prafdin.ru:8181/"
           else
-            echo "❌ Process NOT FOUND"
-            echo "=== Logs ==="
+            echo "❌ FAILED"
             cat app.log
             exit 1
           fi
-          
-          echo "Port check:"
-          if netstat -tln | grep :8181 > /dev/null; then
-            echo "✅ Port 8181 LISTENING"
-          else
-            echo "❌ Port NOT LISTENING"
-            exit 1
-          fi
-          
-          echo "HTTP check:"
-          curl -s -o /dev/null -w "Status: %{http_code}\n" http://localhost:8181/
-          
-          echo "🎉 Deployment verified!"
-
-    - name: Final report
-      run: |
-        echo "✅ DEPLOYMENT COMPLETED"
-        echo "🌐 Access your app at: http://app.shavarina.course.prafdin.ru:8181/"
-        echo "📊 If the URL doesn't work, check the verification step above"
