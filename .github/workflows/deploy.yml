@@ -31,7 +31,7 @@ jobs:
         mkdir -p ~/.ssh
         ssh-keyscan -p $SSH_PORT $SERVER_HOST >> ~/.ssh/known_hosts
         
-        echo "🚀 Starting deployment without systemd..."
+        echo "🚀 Starting deployment..."
         
         ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'REMOTE_SCRIPT'
         set -e
@@ -45,73 +45,83 @@ jobs:
         git checkout github-actions
         git reset --hard origin/github-actions
         
-        echo "📦 Installing Python dependencies..."
-        pip3 install -r requirements.txt --break-system-packages
+        echo "🔍 INVESTIGATION: What's running on the system?"
+        echo "=== All python processes ==="
+        ps aux | grep python | grep -v grep
         
-        echo "🛑 Stopping previous version..."
-        echo "=== Checking processes on port $PORT ==="
-        kill -9 172954 2>/dev/null || echo "PID 172954 not found or already dead"
-        sudo fuser -k $PORT/tcp 2>/dev/null || true
-        lsof -ti:$PORT | xargs -r kill -9 2>/dev/null || true
-        pkill -9 -f "python.*$PORT" 2>/dev/null || true
-        pkill -9 -f "uvicorn.*$PORT" 2>/dev/null || true
+        echo "=== All processes using port 8181 ==="
+        lsof -i :8181 || echo "No processes on port 8181"
+        
+        echo "=== Network connections ==="
+        netstat -tlnp | grep :8181 || echo "No netstat entries for 8181"
+        
+        echo "🛑 AGGRESSIVE CLEANUP..." 
+        echo "Killing all user python processes..."
         pkill -9 -u $USER python 2>/dev/null || true
         pkill -9 -u $USER python3 2>/dev/null || true
+        sleep 3
         
-        echo "⏳ Waiting for processes to terminate..."
-        sleep 5
-
-        if lsof -i :$PORT > /dev/null 2>&1; then
-            echo "❌ Port $PORT is still occupied after kill attempts"
-            echo "=== Current processes on port $PORT ==="
-            lsof -i :$PORT
-            echo "=== Force killing ==="
-            lsof -ti:$PORT | xargs -r kill -9
-            sleep 3
+        echo "Killing processes by port..."
+        sudo fuser -k 8181/tcp 2>/dev/null || true
+        lsof -ti:8181 | xargs -r kill -9 2>/dev/null || true
+        sleep 3
+        
+        echo "🔍 VERIFICATION: Check if port is free..."
+        if lsof -i :8181 > /dev/null 2>&1; then
+            echo "❌ Port 8181 STILL occupied after cleanup"
+            echo "=== Current processes ==="
+            lsof -i :8181
+            sleep 2
         else
-            echo "✅ Port $PORT is now free"
-        fi
-        
-        if lsof -i :$PORT > /dev/null 2>&1; then
-            echo "⚠️ WARNING: Port $PORT still occupied, but continuing..."
+            echo "✅ Port 8181 is free, using it"
         fi
         
         echo "📦 Installing Python dependencies..."
         pip3 install -r requirements.txt --break-system-packages
         
-        echo "🚀 Starting application..."
+        echo "🚀 Starting application on port $PORT..."
         cd "$APP_DIR"
+        
+        if lsof -i :$PORT > /dev/null 2>&1; then
+            echo "❌ CANNOT START: Port $PORT is occupied right before launch!"
+            echo "=== Last-second check ==="
+            lsof -i :$PORT
+            exit 1
+        fi
+        
         nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT > /home/user/app.log 2>&1 &
         APP_PID=$!
         echo $APP_PID > /home/user/app.pid
         
         echo "⏳ Waiting for startup..."
-        sleep 10
+        sleep 5
         
         echo "🔍 Checking application status..."
         
-        if ps -p $APP_PID > /dev/null; then
-          echo "✅ Application process is running (PID: $APP_PID)"
-        else
-          echo "❌ Application process died"
-          echo "=== Application logs ==="
-          tail -30 /home/user/app.log
-          exit 1
+        if ! ps -p $APP_PID > /dev/null 2>&1; then
+            echo "❌ Application process died immediately"
+            echo "=== Application logs ==="
+            tail -50 /home/user/app.log
+            echo "=== Current port status ==="
+            lsof -i :$PORT || echo "Port $PORT is free"
+            exit 1
         fi
+        
+        echo "✅ Application process is running (PID: $APP_PID)"
         
         echo "🔍 Testing HTTP response..."
-        if curl -s -f http://localhost:$PORT/ > /dev/null; then
-          echo "✅ Application is responding to HTTP requests"
-          echo "=== Response ==="
-          curl -s http://localhost:$PORT/ | head -2
+        if curl -s -f http://localhost:$PORT/ > /dev/null 2>&1; then
+            echo "✅ Application is responding to HTTP requests"
+            echo "🎉 Deployment completed successfully!"
+            echo "🌐 Application available at: http://app.shavarina.course.prafdin.ru:$PORT/"
         else
-          echo "⚠️ Application running but not responding to HTTP"
-          echo "=== Checking port usage ==="
-          netstat -tlnp | grep ":$PORT" || echo "Port $PORT not found"
-          echo "=== Recent logs ==="
-          tail -20 /home/user/app.log
+            echo "⚠️ Application running but not responding to HTTP"
+            echo "=== Checking why ==="
+            netstat -tlnp | grep ":$PORT" || echo "Port $PORT not found in netstat"
+            echo "=== Recent logs ==="
+            tail -20 /home/user/app.log
         fi
         
-        echo "🎉 Deployment completed successfully!"
-        echo "🌐 Application available at: http://app.shavarina.course.prafdin.ru:$PORT/"
+        echo "=== Final process check ==="
+        ps -p $APP_PID -o pid,user,command
         REMOTE_SCRIPT
