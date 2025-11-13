@@ -37,44 +37,60 @@ jobs:
 
           cd /home/user/catty-reminders-app
           echo "📁 Current directory: $(pwd)"
+          echo "📋 Files in directory:"
           ls -la
           
-          echo "🛑 Stopping previous processes..."
-          pkill -f "uvicorn.*8181" || true
-          pkill -f "python.*app" || true
-          sleep 3
+          echo "🛑 Stopping previous processes..." 
+          pkill -f "uvicorn.*main:app" || true
+          sleep 5
           
           echo "📦 Installing/updating dependencies..."
           pip3 install -r requirements.txt --user
           
-          echo "🚀 Starting application on port 8181..."
-          
+          echo "🚀 Starting application on port 8181..." 
           nohup uvicorn main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
+          UVICORN_PID=$!
+          echo "Uvicorn started with PID: $UVICORN_PID"
           
           echo "⏳ Waiting for application startup..."
-          sleep 10
+          sleep 15  
           
           echo "🔍 Checking application process..."
-          APP_PID=$(pgrep -f "uvicorn.*8181")
-          if [ -n "$APP_PID" ]; then
-            echo "✅ Application running with PID: $APP_PID"
+          if ps -p $UVICORN_PID > /dev/null; then
+            echo "✅ Main uvicorn process running with PID: $UVICORN_PID"
           else
-            echo "❌ Application process not found"
-            echo "=== Checking logs ==="
+            echo "❌ Main uvicorn process died"
+          fi
+          
+          APP_PIDS=$(pgrep -f "uvicorn.*8181")
+          if [ -n "$APP_PIDS" ]; then
+            echo "✅ Found uvicorn processes: $APP_PIDS"
+          else
+            echo "❌ No uvicorn processes found"
+            echo "=== Application logs ==="
             cat app.log
             exit 1
           fi
           
           echo "🔌 Checking port 8181..."
-          netstat -tln | grep :8181 && echo "✅ Port 8181 is listening" || echo "❌ Port 8181 not listening"
+          if netstat -tln | grep :8181 > /dev/null; then
+            echo "✅ Port 8181 is listening"
+          else
+            echo "❌ Port 8181 not listening"
+            echo "=== Checking what's using ports ==="
+            netstat -tlnp
+            exit 1
+          fi
           
-          echo "🌐 Testing application..."
-          if curl -f --retry 3 --retry-delay 5 http://localhost:8181/; then
+          echo "🌐 Testing application endpoint..."
+          if curl -f --retry 3 --retry-delay 5 --max-time 10 http://localhost:8181/; then
             echo "✅ Application is responding correctly"
           else
             echo "❌ Application not responding to HTTP requests"
             echo "=== Recent logs ==="
-            tail -30 app.log
+            tail -50 app.log
+            echo "=== Checking processes again ==="
+            ps aux | grep uvicorn
             exit 1
           fi
           
