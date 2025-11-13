@@ -2,40 +2,81 @@ name: CD - Deploy to Production
 
 on:
   release:
-    types: 
-      - published
+    types: [published]
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Deploy app to remote server
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: course.prafdin.ru
-          port: 2469
-          username: user
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd ~/catty-reminders-app
-            
-            echo "Finding process on port 8181..."
-            PID=$(lsof -ti:8181) || true
-            if [ ! -z "$PID" ]; then
-              echo "Stopping process $PID"
-              kill $PID || true
-              sleep 3
-            fi
-            
-            git pull origin github-actions
-            rm -rf venv
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install -r requirements.txt
-            nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
-            sleep 10
-            curl -f http://localhost:8181/ && echo "Deployment successful"
+    - name: Deploy to server
+      uses: appleboy/scp-action@v0.1.3
+      with:
+        host: course.prafdin.ru
+        username: user
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 2469
+        source: "."
+        target: "/home/user/catty-reminders-app"
+        strip_components: 1
+
+    - name: Setup and start application
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: course.prafdin.ru
+        username: user
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 2469
+        script: |
+          set -e
+          echo "🚀 Starting deployment process..."
+
+          cd /home/user/catty-reminders-app
+          echo "📁 Current directory: $(pwd)"
+          ls -la
+          
+          echo "🛑 Stopping previous processes..."
+          pkill -f "uvicorn.*8181" || true
+          pkill -f "python.*app" || true
+          sleep 3
+          
+          echo "📦 Installing/updating dependencies..."
+          pip3 install -r requirements.txt --user
+          
+          echo "🚀 Starting application on port 8181..."
+          
+          nohup uvicorn main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
+          
+          echo "⏳ Waiting for application startup..."
+          sleep 10
+          
+          echo "🔍 Checking application process..."
+          APP_PID=$(pgrep -f "uvicorn.*8181")
+          if [ -n "$APP_PID" ]; then
+            echo "✅ Application running with PID: $APP_PID"
+          else
+            echo "❌ Application process not found"
+            echo "=== Checking logs ==="
+            cat app.log
+            exit 1
+          fi
+          
+          echo "🔌 Checking port 8181..."
+          netstat -tln | grep :8181 && echo "✅ Port 8181 is listening" || echo "❌ Port 8181 not listening"
+          
+          echo "🌐 Testing application..."
+          if curl -f --retry 3 --retry-delay 5 http://localhost:8181/; then
+            echo "✅ Application is responding correctly"
+          else
+            echo "❌ Application not responding to HTTP requests"
+            echo "=== Recent logs ==="
+            tail -30 app.log
+            exit 1
+          fi
+          
+          echo "🎉 Deployment completed successfully!"
+          echo "🌐 Application available at: http://app.shavarina.course.prafdin.ru/"
