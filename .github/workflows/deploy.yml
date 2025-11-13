@@ -49,14 +49,17 @@ jobs:
         pip3 install -r requirements.txt --break-system-packages
         
         echo "🛑 Stopping previous version..."
-        pkill -f "uvicorn.*8181" 2>/dev/null || true
+        pkill -f "uvicorn" 2>/dev/null || true
+        pkill -f "python.*8181" 2>/dev/null || true
         sleep 3
-
-        PID=$(lsof -ti:$PORT 2>/dev/null || echo "")
-        if [ ! -z "$PID" ]; then
-          echo "Found processes using port $PORT: $PID"
-          kill -9 $PID 2>/dev/null || true
+        
+        echo "Finding processes on port $PORT..."
+        PIDS=$(lsof -ti:$PORT 2>/dev/null || echo "")
+        if [ ! -z "$PIDS" ]; then
+          echo "Found PIDs using port $PORT: $PIDS"
+          kill -9 $PIDS 2>/dev/null || true
         fi
+        sleep 2
         
         echo "Double-checking port is free..."
         sleep 3
@@ -87,7 +90,6 @@ jobs:
           exit 1
         fi
         
-        # Проверяем HTTP ответ
         echo "🔍 Testing HTTP response..."
         if curl -s -f http://localhost:$PORT/ > /dev/null; then
           echo "✅ Application is responding to HTTP requests"
