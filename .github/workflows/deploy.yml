@@ -1,0 +1,108 @@
+name: CD - Deploy to Production
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  SERVER_HOST: "course.prafdin.ru"
+  SERVER_USER: "user"
+  SSH_PORT: 2469
+  APP_DIR: "/home/user/catty-reminders-app"
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        
+    - name: Deploy application
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+        
+        echo "🚀 Starting deployment..."
+        
+        ssh -p $SSH_PORT $SERVER_USER@$SERVER_HOST << 'EOF'
+        set -e
+        
+        APP_DIR="/home/user/catty-reminders-app"
+        SERVICE_NAME="catty-reminders-app"
+        PORT="8181"
+        
+        echo "📁 Ensuring application directory..."
+        sudo mkdir -p $APP_DIR
+        sudo chown -R user:user $APP_DIR
+        
+        echo "📥 Updating repository..."
+        cd $APP_DIR
+        if [ ! -d ".git" ]; then
+          git clone https://github.com/Aaliin/catty-reminders-app.git .
+        else
+          git fetch origin
+          git reset --hard origin/main
+        fi
+        
+        echo "📦 Installing Python dependencies..."
+        if [ -f "requirements.txt" ]; then
+          pip3 install -r requirements.txt --break-system-packages
+        else
+          echo "❌ requirements.txt not found"
+          exit 1
+        fi
+        
+        echo "🛑 Stopping previous version..."
+        sudo pkill -f "uvicorn" || true
+        sleep 2
+        
+        echo "⚙️ Configuring systemd service..."
+        sudo tee /etc/systemd/system/$SERVICE_NAME.service > /dev/null <<EOF
+        [Unit]
+        Description=Catty Reminders App
+        After=network.target
+
+        [Service]
+        Type=simple
+        User=user
+        WorkingDirectory=$APP_DIR
+        ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+        Restart=always
+        RestartSec=5
+
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        
+        echo "🔄 Starting systemd service..."
+        sudo systemctl daemon-reload
+        sudo systemctl enable $SERVICE_NAME
+        sudo systemctl start $SERVICE_NAME
+        
+        echo "🔍 Checking service status..."
+        sleep 5
+        if sudo systemctl is-active --quiet $SERVICE_NAME; then
+          echo "✅ Application started successfully!"
+        else
+          echo "❌ Service failed to start"
+          sudo systemctl status $SERVICE_NAME
+          exit 1
+        fi
+        
+        echo "🔍 Checking application response..."
+        if curl -s http://localhost:$PORT/ > /dev/null 2>&1; then
+          echo "✅ Application is responding"
+        else
+          echo "⚠️ Application is running but not responding to requests"
+        fi
+        
+        echo "🎉 Deployment completed successfully!"
+        EOF
