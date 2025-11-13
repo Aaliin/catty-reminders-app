@@ -24,7 +24,7 @@ jobs:
         target: "/home/user/catty-reminders-app"
         strip_components: 1
 
-    - name: Setup and start application
+    - name: Start application
       uses: appleboy/ssh-action@v0.1.10
       with:
         host: course.prafdin.ru
@@ -32,44 +32,42 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 2469
         script: |
-          set -e
-          echo "🚀 Starting deployment process..."
           cd /home/user/catty-reminders-app
-          
-          echo "📁 Directory structure:"
-          ls -la
-          echo "📁 App folder contents:"
-          ls -la app/
-          
-          echo "🛑 Stopping previous processes..."
           pkill -f "uvicorn.*8181" || true
           sleep 3
-          
-          echo "📦 Installing dependencies..."
           pip3 install -r requirements.txt --user
-          
-          echo "🚀 Starting application from app/main.py..." 
           nohup uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
-          
-          echo "⏳ Waiting for startup..."
           sleep 15
+
+    - name: Verify deployment
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: course.prafdin.ru
+        username: user
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 2469
+        script: |
+          echo "=== FINAL VERIFICATION ==="
+          cd /home/user/catty-reminders-app
           
-          echo "🔍 Checking application..."
-          if pgrep -f "uvicorn.*8181" > /dev/null; then
-            echo "✅ Application process is running"
-          else
-            echo "❌ Application process not found"
+          # Критические проверки
+          if ! pgrep -f "uvicorn.*8181" > /dev/null; then
+            echo "❌ CRITICAL: Application process not running"
+            echo "Logs:"
             cat app.log
             exit 1
           fi
           
-          echo "🌐 Testing HTTP..."
-          if curl -s http://localhost:8181/ > /dev/null; then
-            echo "✅ HTTP test passed"
-          else
-            echo "⚠️ HTTP test failed, checking logs..."
-            tail -20 app.log
+          if ! netstat -tln | grep :8181 > /dev/null; then
+            echo "❌ CRITICAL: Port 8181 not listening"
+            exit 1
           fi
           
-          echo "🎉 Deployment completed!"
-          echo "🌐 Application available at: http://app.shavarina.course.prafdin.ru/"
+          if ! curl -s -f http://localhost:8181/ > /dev/null; then
+            echo "⚠️ WARNING: HTTP request failed but process is running"
+            echo "This might be normal if no root route defined"
+          fi
+          
+          echo "✅ SUCCESS: Basic checks passed"
+          echo "📊 Process: $(pgrep -f 'uvicorn.*8181')"
+          echo "🌐 Test URL: http://app.shavarina.course.prafdin.ru:8181/"
