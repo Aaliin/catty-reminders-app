@@ -49,8 +49,31 @@ jobs:
         pip3 install -r requirements.txt --break-system-packages
         
         echo "🛑 Stopping previous version..."
-        pkill -f "uvicorn.*8181" 2>/dev/null || true
-        sleep 3
+        echo "=== Checking processes on port $PORT ==="
+        lsof -ti:$PORT | xargs -r kill -9 2>/dev/null || true
+        pkill -f "uvicorn.*$PORT" 2>/dev/null || true
+        pkill -f "python.*$PORT" 2>/dev/null || true
+        
+        echo "⏳ Waiting for processes to terminate..."
+        sleep 5
+
+        if lsof -i :$PORT > /dev/null 2>&1; then
+            echo "❌ Port $PORT is still occupied after kill attempts"
+            echo "=== Current processes on port $PORT ==="
+            lsof -i :$PORT
+            echo "=== Force killing ==="
+            lsof -ti:$PORT | xargs -r kill -9
+            sleep 3
+        else
+            echo "✅ Port $PORT is now free"
+        fi
+        
+        if lsof -i :$PORT > /dev/null 2>&1; then
+            echo "⚠️ WARNING: Port $PORT still occupied, but continuing..."
+        fi
+        
+        echo "📦 Installing Python dependencies..."
+        pip3 install -r requirements.txt --break-system-packages
         
         echo "🚀 Starting application..."
         cd "$APP_DIR"
