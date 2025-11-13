@@ -26,83 +26,105 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
         
-    - name: Deploy application
+    - name: Takeover port 8181
       run: |
         mkdir -p ~/.ssh
         ssh-keyscan -p $SSH_PORT $SERVER_HOST >> ~/.ssh/known_hosts
         
-        echo "🚀 Starting deployment without systemd..."
+        echo "🚀 Taking over port 8181 for Catty App..."
         
         ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'REMOTE_SCRIPT'
         set -e
         
         APP_DIR="/home/user/catty-reminders-app"
+        PORT="8181" 
+        
+        echo "Stopping systemd services..."
+        sudo systemctl stop catty-reminders-app 2>/dev/null || true
+        systemctl --user stop catty-reminders-app 2>/dev/null || true
+        
+        echo "Killing processes on port $PORT..."
+        sudo pkill -9 -f "uvicorn.*8181" 2>/dev/null || true
+        sudo pkill -9 -f "python.*8181" 2>/dev/null || true
+        
+        echo "Force freeing port $PORT..."
+        sudo fuser -k $PORT/tcp 2>/dev/null || true
+        
+        sleep 5
+        echo "Verifying port $PORT is free..."
+        if lsof -i :$PORT > /dev/null 2>&1; then
+          echo "❌ Port $PORT still occupied, using nuclear option..."
+          OCCUPIER_PID=$(lsof -ti:$PORT | head -1)
+          if [ ! -z "$OCCUPIER_PID" ]; then
+            echo "Killing process $OCCUPIER_PID..."
+            sudo kill -9 $OCCUPIER_PID
+            sleep 3
+          fi
+        fi
+        
+        echo "✅ Port $PORT should be free now"
+        REMOTE_SCRIPT
+
+    - name: Deploy application
+      run: |
+        echo "🚀 Deploying Catty App on port 8181..."
+        
+        ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'DEPLOY_SCRIPT'
+        set -e
+        
+        APP_DIR="/home/user/catty-reminders-app"
         PORT="8181"
         
-        echo "📥 Updating repository..."
+        echo "📥 Updating application code..."
         cd "$APP_DIR"
         git fetch origin
         git checkout github-actions
         git reset --hard origin/github-actions
         
-        echo "📦 Installing Python dependencies..."
-        pip3 install -r requirements.txt --break-system-packages
-        
-        echo "🛑 Stopping previous version..."
-        pkill -f "uvicorn" 2>/dev/null || true
-        pkill -f "python.*8181" 2>/dev/null || true
-        sleep 3
-        
-        echo "Finding processes on port $PORT..."
-        PIDS=$(lsof -ti:$PORT 2>/dev/null || echo "")
-        if [ ! -z "$PIDS" ]; then
-          echo "Found PIDs using port $PORT: $PIDS"
-          kill -9 $PIDS 2>/dev/null || true
+        echo "🔧 Testing application..."
+        if python3 -c "from app.main import app; print('✅ App imports successfully')"; then
+          echo "✅ Application is valid"
+        else
+          echo "❌ Application import failed"
+          exit 1
         fi
+        
+        echo "🚀 Starting application on port $PORT..."
+        pkill -f "uvicorn.*$PORT" 2>/dev/null || true
         sleep 2
         
-        echo "Double-checking port is free..."
-        sleep 3
-        if lsof -i :$PORT > /dev/null 2>&1; then
-          echo "❌ Port $PORT is still in use, forcing cleanup..."
-          sudo fuser -k $PORT/tcp 2>/dev/null || true
-        else
-          echo "✅ Port $PORT is free"
-        fi
-        
-        echo "🚀 Starting application..."
         cd "$APP_DIR"
         nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT > /home/user/app.log 2>&1 &
         APP_PID=$!
         echo $APP_PID > /home/user/app.pid
         
-        echo "⏳ Waiting for startup..."
+        echo "⏳ Waiting for application to start..."
         sleep 10
         
-        echo "🔍 Checking application status..."
+        echo "🔍 Verifying application..."
         
         if ps -p $APP_PID > /dev/null; then
-          echo "✅ Application process is running (PID: $APP_PID)"
+          echo "✅ Application process running (PID: $APP_PID)"
         else
           echo "❌ Application process died"
-          echo "=== Application logs ==="
+          echo "=== Logs ==="
           tail -30 /home/user/app.log
           exit 1
         fi
         
-        echo "🔍 Testing HTTP response..."
+        echo "🔍 Testing HTTP access..."
         if curl -s -f http://localhost:$PORT/ > /dev/null; then
-          echo "✅ Application is responding to HTTP requests"
+          echo "✅ Application responding on port $PORT"
           echo "=== Response ==="
           curl -s http://localhost:$PORT/ | head -2
         else
-          echo "⚠️ Application running but not responding to HTTP"
-          echo "=== Checking port usage ==="
-          netstat -tlnp | grep ":$PORT" || echo "Port $PORT not found"
-          echo "=== Recent logs ==="
-          tail -20 /home/user/app.log
+          echo "❌ Application not responding"
+          echo "=== Checking port ==="
+          netstat -tln | grep :$PORT || echo "Port $PORT not found"
+          exit 1
         fi
         
-        echo "🎉 Deployment completed successfully!"
-        echo "🌐 Application available at: http://app.shavarina.course.prafdin.ru:$PORT/"
-        REMOTE_SCRIPT
+        echo "🎉 DEPLOYMENT SUCCESSFUL!"
+        echo "🌐 Your application is available at:"
+        echo "   http://app.shavarina.course.prafdin.ru:8181/"
+        DEPLOY_SCRIPT
