@@ -2,105 +2,40 @@ name: CD - Deploy to Production
 
 on:
   release:
-    types: [published]
-  workflow_dispatch:
-
-env:
-  SERVER_HOST: "course.prafdin.ru"
-  SERVER_USER: "user"
-  SSH_PORT: 2469
+    types: 
+      - published
 
 jobs:
   deploy:
-    name: Deploy Application
     runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        ref: github-actions
-        
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.8.0
-      with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-        
-    - name: Deploy application
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -p $SSH_PORT $SERVER_HOST >> ~/.ssh/known_hosts
-        
-        echo "🚀 Starting deployment without systemd..."
-        
-        ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'REMOTE_SCRIPT'
-        set -e
-        
-        APP_DIR="/home/user/catty-reminders-app"
-        PORT="8181"
-        
-        echo "📥 Updating repository..."
-        cd "$APP_DIR"
-        git fetch origin
-        git checkout github-actions
-        git reset --hard origin/github-actions
-        
-        echo "📦 Installing Python dependencies..."
-        pip3 install -r requirements.txt --break-system-packages
-        
-        echo "🛑 Stopping previous version..."
-        echo "=== Checking processes on port $PORT ==="
-        kill -9 172954 2>/dev/null || echo "PID 172954 not found or already dead"
-        sudo fuser -k $PORT/tcp 2>/dev/null || true
-        lsof -ti:$PORT | xargs -r kill -9 2>/dev/null || true
-        pkill -9 -f "python.*$PORT" 2>/dev/null || true
-        pkill -9 -f "uvicorn.*$PORT" 2>/dev/null || true
-        pkill -9 -u $USER python 2>/dev/null || true
-        pkill -9 -u $USER python3 2>/dev/null || true
-        
-        echo "⏳ Waiting for processes to terminate..."
-        sleep 5
 
-        if lsof -i :$PORT > /dev/null 2>&1; then
-            echo "❌ Port $PORT is still occupied after kill attempts"
-            echo "=== Current processes on port $PORT ==="
-            lsof -i :$PORT
-            echo "=== Force killing ==="
-            lsof -ti:$PORT | xargs -r kill -9
-            sleep 3
-        else
-            echo "✅ Port $PORT is now free"
-        fi
-        
-        if lsof -i :$PORT > /dev/null 2>&1; then
-            echo "⚠️ WARNING: Port $PORT still occupied, but continuing..."
-        fi
-        
-        echo "📦 Installing Python dependencies..."
-        pip3 install -r requirements.txt --break-system-packages
-        
-        echo "🚀 Starting application..."
-        cd "$APP_DIR"
-        nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT > /home/user/app.log 2>&1 &
-        APP_PID=$!
-        echo $APP_PID > /home/user/app.pid
-        
-        echo "⏳ Waiting for startup..."
-        sleep 10
-        
-        echo "🔍 Testing HTTP response..."
-        if curl -s -f http://localhost:$PORT/ > /dev/null; then
-          echo "✅ Application is responding to HTTP requests"
-          echo "=== Response ==="
-          curl -s http://localhost:$PORT/ | head -2
-        else
-          echo "⚠️ Application running but not responding to HTTP"
-          echo "=== Checking port usage ==="
-          netstat -tlnp | grep ":$PORT" || echo "Port $PORT not found"
-          echo "=== Recent logs ==="
-          tail -20 /home/user/app.log
-        fi
-        
-        echo "🎉 Deployment completed successfully!"
-        echo "🌐 Application available at: http://app.shavarina.course.prafdin.ru:$PORT/"
-        REMOTE_SCRIPT
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy app to remote server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: course.prafdin.ru
+          port: 2469
+          username: user
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/catty-reminders-app
+            
+            echo "Finding process on port 8181..."
+            PID=$(lsof -ti:8181) || true
+            if [ ! -z "$PID" ]; then
+              echo "Stopping process $PID"
+              kill $PID || true
+              sleep 3
+            fi
+            
+            git pull origin github-actions
+            rm -rf venv
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install -r requirements.txt
+            nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
+            sleep 10
+            curl -f http://localhost:8181/ && echo "Deployment successful"
