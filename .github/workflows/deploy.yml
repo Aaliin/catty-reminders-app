@@ -32,6 +32,7 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 2469
         script: |
+          echo "🚀 Starting deployment..."
           cd /home/user/catty-reminders-app
           pkill -f "uvicorn.*8181" || true
           sleep 3
@@ -47,27 +48,34 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 2469
         script: |
-          echo "=== FINAL VERIFICATION ==="
+          echo "=== 🎯 VERIFICATION ==="
           cd /home/user/catty-reminders-app
           
-          # Критические проверки
-          if ! pgrep -f "uvicorn.*8181" > /dev/null; then
-            echo "❌ CRITICAL: Application process not running"
-            echo "Logs:"
+          echo "Process check:"
+          if pgrep -f "uvicorn.*8181" > /dev/null; then
+            echo "✅ Process RUNNING: $(pgrep -f 'uvicorn.*8181')"
+          else
+            echo "❌ Process NOT FOUND"
+            echo "=== Logs ==="
             cat app.log
             exit 1
           fi
           
-          if ! netstat -tln | grep :8181 > /dev/null; then
-            echo "❌ CRITICAL: Port 8181 not listening"
+          echo "Port check:"
+          if netstat -tln | grep :8181 > /dev/null; then
+            echo "✅ Port 8181 LISTENING"
+          else
+            echo "❌ Port NOT LISTENING"
             exit 1
           fi
           
-          if ! curl -s -f http://localhost:8181/ > /dev/null; then
-            echo "⚠️ WARNING: HTTP request failed but process is running"
-            echo "This might be normal if no root route defined"
-          fi
+          echo "HTTP check:"
+          curl -s -o /dev/null -w "Status: %{http_code}\n" http://localhost:8181/
           
-          echo "✅ SUCCESS: Basic checks passed"
-          echo "📊 Process: $(pgrep -f 'uvicorn.*8181')"
-          echo "🌐 Test URL: http://app.shavarina.course.prafdin.ru:8181/"
+          echo "🎉 Deployment verified!"
+
+    - name: Final report
+      run: |
+        echo "✅ DEPLOYMENT COMPLETED"
+        echo "🌐 Access your app at: http://app.shavarina.course.prafdin.ru:8181/"
+        echo "📊 If the URL doesn't work, check the verification step above"
