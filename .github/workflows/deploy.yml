@@ -24,7 +24,7 @@ jobs:
         target: "/home/user/catty-reminders-app"
         strip_components: 1
 
-    - name: Stop systemd service and start app
+    - name: Deploy with venv
       uses: appleboy/ssh-action@v0.1.10
       with:
         host: course.prafdin.ru
@@ -33,33 +33,27 @@ jobs:
         port: 2469
         script: |
           set -e
-          echo "🚀 Stopping systemd service and deploying..."
+          echo "🚀 Deploying with virtual environment..."
           cd /home/user/catty-reminders-app
           
-          echo "🛑 Stopping systemd user services..." 
-          systemctl --user stop catty-app 2>/dev/null || echo "No catty-app service"
-          systemctl --user stop uvicorn 2>/dev/null || echo "No uvicorn service"
-          systemctl --user stop app 2>/dev/null || echo "No app service"
-          systemctl --user stop reminders 2>/dev/null || echo "No reminders service"
-          
-          systemctl --user list-units | grep -E "(uvicorn|8181|catty|app)" | awk '{print $1}' | while read service; do
-            echo "Stopping service: $service"
-            systemctl --user stop "$service" 2>/dev/null || true
-          done
+          echo "🛑 Stopping previous processes..."
+          pkill -f "uvicorn.*8181" || true
           sleep 3
           
-          echo "🔍 Checking if port is free..."
-          if netstat -tln | grep :8181 > /dev/null; then
-            echo "❌ Port still occupied, forcing cleanup..."
-            sudo fuser -k 8181/tcp 2>/dev/null || true
-            sleep 3
-          fi
+          echo "🐍 Setting up virtual environment..."
+          # Создаем или активируем venv
+          python3 -m venv venv 2>/dev/null || true
+          source venv/bin/activate
           
-          echo "📦 Installing dependencies..."
-          pip3 install -r requirements.txt --user
+          echo "📦 Installing dependencies in venv..."
+          pip install -r requirements.txt
+          
+          echo "🔍 Checking port 8181..."
+          # Используем ss вместо netstat
+          ss -tln | grep :8181 && echo "❌ Port 8181 occupied" || echo "✅ Port 8181 free"
           
           echo "🚀 Starting application..."
-          nohup uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
+          nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
           echo "Application started"
           sleep 10
           
@@ -77,11 +71,29 @@ jobs:
           echo "=== VERIFICATION ==="
           cd /home/user/catty-reminders-app
           
-          if pgrep -f "uvicorn.*8181" > /dev/null && netstat -tln | grep :8181 > /dev/null; then
-            echo "🎉 SUCCESS! Application running on port 8181"
-            echo "🌐 Access at: http://app.shavarina.course.prafdin.ru:8181/"
+          echo "1. Process check:"
+          if pgrep -f "uvicorn.*8181" > /dev/null; then
+            echo "✅ Process RUNNING"
           else
-            echo "❌ FAILED"
+            echo "❌ Process NOT FOUND"
             cat app.log
             exit 1
           fi
+          
+          echo "2. Port check:"
+          if ss -tln | grep :8181 > /dev/null; then
+            echo "✅ Port 8181 LISTENING"
+          else
+            echo "❌ Port NOT LISTENING"
+            exit 1
+          fi
+          
+          echo "3. HTTP check:"
+          if curl -s http://localhost:8181/ > /dev/null; then
+            echo "✅ HTTP access WORKING"
+          else
+            echo "⚠️ HTTP access failed (might be normal)"
+          fi
+          
+          echo "🎉 SUCCESS! Application deployed on port 8181"
+          echo "🌐 Access at: http://app.shavarina.course.prafdin.ru:8181/"
