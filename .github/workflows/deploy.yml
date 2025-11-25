@@ -16,26 +16,39 @@ jobs:
       - name: Deploy app to remote server
         uses: appleboy/ssh-action@v0.1.10
         with:
-          host: course.prafdin.ru
+          id: shavarina
           port: 2469
+          proxy: course.prafdin.ru
           username: user
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ~/catty-reminders-app
+            echo "Starting application deployment..."
             
-            echo "Finding process on port 8181..."
-            PID=$(lsof -ti:8181) || true
-            if [ ! -z "$PID" ]; then
-              echo "Stopping process $PID"
-              kill $PID || true
-              sleep 3
-            fi
+            cd /home/user/catty-reminders-app
+            git fetch origin
+            git reset --hard origin/main
             
-            git pull origin github-actions
-            rm -rf venv
-            python3 -m venv venv
+            echo "Installing Python dependencies..."
             source venv/bin/activate
             pip install -r requirements.txt
-            nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
+            
+            echo "Restarting application service..."
+            sudo systemctl daemon-reload
+            sudo systemctl restart catty-reminders.service
+            
             sleep 10
-            curl -f http://localhost:8181/ && echo "Deployment successful" || echo "Deployment completed (curl check skipped)"
+            if curl -f http://localhost:8181/ > /dev/null 2>&1; then
+              echo "Application deployed successfully!"
+              echo "Available at: http://app.id.proxy"
+              echo "Running on port: 8181"
+              
+              echo "Service status:"
+              sudo systemctl status catty-reminders.service --no-pager
+            else
+              echo "Application health check failed - not responding on port 8181"
+              echo "Service status:"
+              sudo systemctl status catty-reminders.service --no-pager
+              echo "Service logs:"
+              sudo journalctl -u catty-reminders.service -n 20 --no-pager
+              exit 1
+            fi
