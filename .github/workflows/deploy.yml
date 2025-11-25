@@ -31,24 +31,21 @@ jobs:
               echo "Creating new virtual environment..."
               python3 -m venv venv
             fi
-            
+
             echo "Installing Python dependencies..."
             source venv/bin/activate
             pip install -r requirements.txt
 
-            pkill -f "uvicorn app.main:app" || true
-            sleep 2
-
             PID=$(lsof -ti:8181) || true
             if [ ! -z "$PID" ]; then
               echo "Stopping process $PID"
-              kill -9 $PID 2>/dev/null || true
-              sleep 1
+              kill $PID || true
+              sleep 3
             fi
-            
+
             echo "Starting application..."
             nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
-            
+
             sleep 10
             if curl -f http://localhost:8181/ > /dev/null 2>&1; then
               echo "Application deployed successfully!"
@@ -58,19 +55,13 @@ jobs:
               echo "Process info:"
               ps aux | grep uvicorn | grep -v grep
               echo "Recent logs:"
-              tail -10 app.log
+              tail -20 app.log
               exit 0
             else
-              echo "Application health check failed"
-              echo "Running processes:"
-              ps aux | grep uvicorn | grep -v grep || echo "No uvicorn processes found"
-              
-              echo "Port 8181 status:"
-              lsof -i :8181 || echo "No process listening on port 8181"
-              echo "Application logs:"
-              tail -10 app.log || echo "No log file found
-              
-              echo "Installed packages:"
-              pip list | grep -E "(fastapi|uvicorn)"
+              echo "Application health check failed - not responding on port 8181"
+              echo "Service status:"
+              sudo systemctl status catty-reminders.service --no-pager
+              echo "Service logs:"
+              sudo journalctl -u catty-reminders.service -n 20 --no-pager
               exit 1
             fi
