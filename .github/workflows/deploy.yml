@@ -36,6 +36,9 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt
 
+            pkill -f "uvicorn app.main:app" || true
+            sleep 3
+
             PID=$(lsof -ti:8181) || true
             if [ ! -z "$PID" ]; then
               echo "Stopping process $PID"
@@ -58,10 +61,16 @@ jobs:
               tail -20 app.log
               exit 0
             else
-              echo "Application health check failed - not responding on port 8181"
-              echo "Service status:"
-              sudo systemctl status catty-reminders.service --no-pager
-              echo "Service logs:"
-              sudo journalctl -u catty-reminders.service -n 20 --no-pager
+              echo "Application health check failed"
+              echo "Running processes:"
+              ps aux | grep uvicorn | grep -v grep || echo "No uvicorn processes found"
+              
+              echo "Port 8181 status:"
+              lsof -i :8181 || echo "No process listening on port 8181"
+              echo "Application logs:"
+              tail -50 app.log || echo "No log file found
+              
+              echo "Installed packages:"
+              pip list | grep -E "(fastapi|uvicorn)"
               exit 1
             fi
