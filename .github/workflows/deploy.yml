@@ -37,13 +37,13 @@ jobs:
             pip install -r requirements.txt
 
             pkill -f "uvicorn app.main:app" || true
-            sleep 3
+            sleep 2
 
             PID=$(lsof -ti:8181) || true
             if [ ! -z "$PID" ]; then
               echo "Stopping process $PID"
-              kill $PID || true
-              sleep 3
+              kill -9 $PID 2>/dev/null || true
+              sleep 1
             fi
             
             echo "Starting application..."
@@ -58,7 +58,7 @@ jobs:
               echo "Process info:"
               ps aux | grep uvicorn | grep -v grep
               echo "Recent logs:"
-              tail -20 app.log
+              tail -10 app.log
               exit 0
             else
               echo "Application health check failed"
@@ -68,7 +68,7 @@ jobs:
               echo "Port 8181 status:"
               lsof -i :8181 || echo "No process listening on port 8181"
               echo "Application logs:"
-              tail -50 app.log || echo "No log file found
+              tail -10 app.log || echo "No log file found
               
               echo "Installed packages:"
               pip list | grep -E "(fastapi|uvicorn)"
