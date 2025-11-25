@@ -16,9 +16,8 @@ jobs:
       - name: Deploy app to remote server
         uses: appleboy/ssh-action@v0.1.10
         with:
-          id: shavarina
+          host: course.prafdin.ru
           port: 2469
-          proxy: course.prafdin.ru
           username: user
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
@@ -39,7 +38,7 @@ jobs:
             sleep 10
             if curl -f http://localhost:8181/ > /dev/null 2>&1; then
               echo "Application deployed successfully!"
-              echo "Available at: http://app.id.proxy"
+              echo "Available at: http://app.shavarina.host"
               echo "Running on port: 8181"
               
               echo "Service status:"
