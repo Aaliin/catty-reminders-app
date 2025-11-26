@@ -27,8 +27,7 @@ jobs:
             git pull origin github-actions
 
             echo "Stopping application..."
-            pkill -f "uvicorn" || true
-            sleep 2
+            pkill -f "uvicorn"
 
             echo "Installing Python dependencies..."
             source venv/bin/activate
