@@ -34,13 +34,17 @@ jobs:
 
             echo "Installing Python dependencies..."
             source venv/bin/activate
+            pip install --upgrade pip
             pip install -r requirements.txt
+
+            pkill -f "uvicorn" || true
+            sleep 3
 
             PID=$(lsof -ti:8181) || true
             if [ ! -z "$PID" ]; then
               echo "Stopping process $PID"
-              kill $PID || true
-              sleep 3
+              kill -9 $PID || true
+              sleep 2
             fi
 
             echo "Starting application..."
@@ -48,20 +52,21 @@ jobs:
 
             sleep 10
             if curl -f http://localhost:8181/ > /dev/null 2>&1; then
-              echo "Application deployed successfully!"
-              echo "Available at: http://app.id.proxy"
-              echo "Running on port: 8181"
-              
               echo "Process info:"
               ps aux | grep uvicorn | grep -v grep
               echo "Recent logs:"
               tail -20 app.log
+              
+              echo "Application deployed successfully!"
+              echo "Available at: http://app.id.proxy"
+              echo "Running on port: 8181"
               exit 0
             else
               echo "Application health check failed - not responding on port 8181"
-              echo "Service status:"
-              sudo systemctl status catty-reminders.service --no-pager
-              echo "Service logs:"
-              sudo journalctl -u catty-reminders.service -n 20 --no-pager
+              echo "Process tree:"
+              ps aux | grep uvicorn
+              
+              echo "Network status:"
+              netstat -tlnp 2>/dev/null | grep 8181 || ss -tlnp 2>/dev/null | grep 8181
               exit 1
             fi
