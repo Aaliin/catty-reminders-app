@@ -25,11 +25,12 @@ jobs:
             
             cd /home/user/catty-reminders-app
             git fetch origin
-            git reset --hard origin/main
-            
+            git reset --hard origin/github-actions
+
             echo "Installing Python dependencies..."
             source venv/bin/activate
 
+            echo "Stopping application..."
             pkill -f "uvicorn" || true
             sleep 3
 
