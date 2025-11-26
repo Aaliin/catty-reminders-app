@@ -22,29 +22,40 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "Starting application deployment..."
-            
-            cd /home/user/catty-reminders-app
-            git pull origin github-actions
 
-            echo "Stopping application..."
-            pkill -f "uvicorn"
+            cd /home/user/catty-reminders-app
+            git fetch origin
+            git reset --hard origin/main
+
+            if [ ! -d "venv" ]; then
+              echo "Creating new virtual environment..."
+              python3 -m venv venv
+            fi
 
             echo "Installing Python dependencies..."
             source venv/bin/activate
+            pip install -r requirements.txt
+
+            PID=$(lsof -ti:8181) || true
+            if [ ! -z "$PID" ]; then
+              echo "Stopping process $PID"
+              kill $PID || true
+              sleep 3
+            fi
 
             echo "Starting application..."
             nohup venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8181 > app.log 2>&1 &
 
-            sleep 5
+            sleep 10
             if curl -f http://localhost:8181/ > /dev/null 2>&1; then
+              echo "Application deployed successfully!"
+              echo "Available at: http://app.id.proxy"
+              echo "Running on port: 8181"
+              
               echo "Process info:"
               ps aux | grep uvicorn | grep -v grep
               echo "Recent logs:"
               tail -20 app.log
-              
-              echo "Application deployed successfully!"
-              echo "Available at: http://app.id.proxy"
-              echo "Running on port: 8181"
               exit 0
             else
               echo "Application health check failed - not responding on port 8181"
