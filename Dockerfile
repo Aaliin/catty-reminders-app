@@ -2,7 +2,7 @@ FROM python:3.11-alpine
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --timeout=60 --retries=3 -r requirements.txt
+RUN pip install fastapi==0.104.1 uvicorn[standard]==0.24.0 Jinja2==3.1.2
 COPY . .
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8181"]
