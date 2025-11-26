@@ -34,8 +34,10 @@ jobs:
 
             echo "Installing Python dependencies..."
             source venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
+            if [ -f "requirements.txt" ]; then
+              echo "Installing only FastAPI dependencies..."
+              pip install --no-deps fastapi uvicorn || pip install -r requirements.txt --no-deps
+            fi
 
             pkill -f "uvicorn" || true
             sleep 3
