@@ -27,14 +27,8 @@ jobs:
             git fetch origin
             git reset --hard origin/main
 
-            if [ ! -d "venv" ]; then
-              echo "Creating new virtual environment..."
-              python3 -m venv venv
-            fi
-
             echo "Installing Python dependencies..."
             source venv/bin/activate
-            pip install -r requirements.txt
 
             PID=$(lsof -ti:8181) || true
             if [ ! -z "$PID" ]; then
@@ -66,4 +60,3 @@ jobs:
               netstat -tlnp 2>/dev/null | grep 8181 || ss -tlnp 2>/dev/null | grep 8181
               exit 1
             fi
-            
