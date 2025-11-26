@@ -26,15 +26,9 @@ jobs:
             cd /home/user/catty-reminders-app
             git fetch origin
             git reset --hard origin/main
-
-            if [ ! -d "venv" ]; then
-              echo "Creating new virtual environment..."
-              python3 -m venv venv
-            fi
-
+            
             echo "Installing Python dependencies..."
             source venv/bin/activate
-            pip install -r requirements.txt
 
             pkill -f "uvicorn" || true
             sleep 3
