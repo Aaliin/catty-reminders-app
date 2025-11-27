@@ -109,7 +109,7 @@ jobs:
             curl -f http://${{ env.APP_DOMAIN }}/login || echo "⚠️ Application might be starting..."
             
             echo "Performing health check..."
-            if curl -f http://localhost:${{ env.PORT }}/health; then
+            if curl -f -s http://localhost:${{ env.PORT }}/health; then
               echo "Health check PASSED - Application is running correctly"
               echo "DEPLOYMENT SUCCESSFUL!"
               echo "========================================"
