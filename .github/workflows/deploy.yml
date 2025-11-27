@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: github-actions
 
       - name: Deploy app to remote server
         uses: appleboy/ssh-action@v0.1.10
@@ -25,13 +27,14 @@ jobs:
 
             cd /home/user/catty-reminders-app
             git fetch origin
-            git pull origin github-actions
+            git reset --hard origin/github-actions
 
             source venv/bin/activate
 
             pkill -f "uvicorn app.main:app" || true
             sleep 2
 
+            echo "Stopping previous application version..."
             PID=$(lsof -ti:8181) || true
             if [ ! -z "$PID" ]; then
               echo "Stopping process $PID"
