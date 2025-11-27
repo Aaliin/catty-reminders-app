@@ -59,12 +59,34 @@ jobs:
             sudo mkdir -p $PROJECT_DIR
             sudo chown $USER:$USER $PROJECT_DIR
             cd $PROJECT_DIR
+
+            echo "Creating docker-compose.yaml..."
+            rm -f docker-compose.yaml
+            echo "Downloading docker-compose.yaml from repository..."
+            curl -s -o docker-compose.yaml \
+              "https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yaml"
+            
+            echo "Verifying docker-compose.yaml was downloaded..."
+            if [ -f "docker-compose.yaml" ] && [ -s "docker-compose.yaml" ]; then
+              echo "docker-compose.yaml downloaded successfully"
+              echo "File size: $(wc -l < docker-compose.yaml) lines"
+            else
+              echo "Failed to download docker-compose.yaml"
+              exit 1
+            fi
+            
+            echo "Validating docker-compose.yaml..."
+            if docker compose config > /dev/null 2>&1; then
+              echo "docker-compose.yaml is valid"
+            else
+              echo "docker-compose.yaml is invalid"
+              echo "File content:"
+              cat docker-compose.yaml
+              exit 1
+            fi
             
             echo "Logging into GitHub Container Registry..."
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u '${{ github.actor }}' --password-stdin
-            
-            echo "Downloading docker-compose.yaml..."
-            rm -f docker-compose.yaml
             
             echo "Stopping previous deployment..."
             docker compose down || true
