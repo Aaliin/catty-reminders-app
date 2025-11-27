@@ -10,7 +10,11 @@ RUN pip install --no-cache-dir requests==2.31.0
 RUN pip install --no-cache-dir tinydb==4.8.0
 RUN pip install --no-cache-dir uvicorn[standard]==0.22.0
 
-COPY . .
+
+COPY app/ ./app/
+COPY config.json .
+COPY templates/ ./templates/
+COPY static/ ./static/
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8181"]
 
