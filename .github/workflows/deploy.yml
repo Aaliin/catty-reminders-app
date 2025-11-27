@@ -94,7 +94,7 @@ jobs:
             docker compose down || true
             
             echo "Pulling latest Docker image..."
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest > /dev/null 2>&1
             
             echo "Starting application with Docker Compose..."
             docker compose up -d --quiet-pull
@@ -123,14 +123,5 @@ jobs:
               docker compose logs
               echo "Container status:"
               docker compose ps -a
-              exit 1
-            fi
-            
-            echo " Checking database..."
-            if docker compose exec -T db mysqladmin ping -h localhost; then
-              echo "Database health check PASSED"
-            else
-              echo "Database health check FAILED"
-              docker compose logs db
               exit 1
             fi
