@@ -29,8 +29,6 @@ jobs:
             git fetch origin
             git reset --hard origin/github-actions
 
-            source venv/bin/activate
-
             pkill -f "uvicorn app.main:app" || true
             sleep 2
 
