@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_lower  }}
+  IMAGE_NAME: aaliin/catty-reminders-app
   CONTAINER_NAME: catty-app
   PORT: 8181
 
