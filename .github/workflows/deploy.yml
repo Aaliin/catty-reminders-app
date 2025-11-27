@@ -30,6 +30,8 @@ jobs:
             echo "Installing Python dependencies..."
             source venv/bin/activate
 
+            fuser -k 8181/tcp || true
+
             PID=$(lsof -ti:8181) || true
             if [ ! -z "$PID" ]; then
               echo "Stopping process $PID"
