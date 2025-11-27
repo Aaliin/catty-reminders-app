@@ -1,10 +1,10 @@
-name: Python CI docker_lab
+name: CI - Docker Compose Tests
 
 on:
   push:
-    branches: [master, github-actions, docker_lab]
+    branches: [multicontainers]
   pull_request:
-    branches: [master, github-actions, docker_lab]
+    branches: [multicontainers]
 
 jobs:
   test:
@@ -88,7 +88,7 @@ jobs:
       if: always()
       run: |
         docker-compose down
-        
+
   docker-build:
     needs: docker-compose-test
     runs-on: ubuntu-latest
