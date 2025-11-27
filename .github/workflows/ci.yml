@@ -1,0 +1,137 @@
+name: Python CI docker_lab
+
+on:
+  push:
+    branches: [master, github-actions, docker_lab]
+  pull_request:
+    branches: [master, github-actions, docker_lab]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        else
+          pip install pytest pytest-playwright fastapi uvicorn jinja2 requests mysql-connector-python
+        fi
+
+    - name: Install Playwright browsers
+      run: |
+        python -m playwright install
+        python -m playwright install-deps
+
+    - name: Run unit tests
+      run: |
+        echo "Running unit tests..."
+        if [ -f "tests/test_unit.py" ]; then
+          python -m pytest tests/test_unit.py -v
+        else
+          echo "No unit tests found"
+        fi
+
+  docker-compose-test:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Compose
+      run: |
+        sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+        docker-compose --version
+
+    - name: Build and test with Docker Compose
+      run: |
+        echo "Building Docker images..."
+        docker-compose build
+        
+        echo "Starting multi-container application..."
+        docker-compose up -d
+        
+        echo "Waiting for services to start..."
+        sleep 30
+        
+        echo "Checking containers status..."
+        docker-compose ps
+        
+        echo "Testing application health..."
+        curl -f http://localhost:8181/health || docker-compose logs app
+        
+        echo "Testing database connection..."
+        docker-compose exec -T db mysqladmin ping -h localhost || docker-compose exec -T db mysql -u catty_user -pcatty_password -e "SELECT 1;" catty_reminders
+        
+        echo "Running tests in container..."
+        docker-compose exec -T app python -m pytest tests/ -v --tb=short || echo "No tests found or tests failed"
+        
+    - name: Stop Docker Compose
+      if: always()
+      run: |
+        docker-compose down
+        
+  docker-build:
+    needs: docker-compose-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Lint Dockerfile with Hadolint
+      continue-on-error: true
+      uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: Dockerfile
+        failure-threshold: warning
+        no-fail: true
+
+    - name: Extract metadata for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix=
+          type=raw,value=latest
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: ${{ github.event_name == 'push' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max

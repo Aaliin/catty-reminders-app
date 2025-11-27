@@ -1,0 +1,47 @@
+name: catty-reminders
+
+version: '3.8'
+
+services:
+  app:
+    image: ghcr.io/aaliin/catty-reminders-app:latest
+    container_name: catty-app
+    restart: unless-stopped
+    ports:
+      - "8181:8181"
+    environment:
+      - APP_DOMAIN=app.shavarina.course.prafdin.ru
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8181/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - app_data:/app/data
+
+  db:
+    image: mysql:8.0
+    container_name: catty-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=catty_reminders
+      - MYSQL_USER=catty_user
+      - MYSQL_PASSWORD=catty_password
+      - MYSQL_ROOT_PASSWORD=root_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  app_data:
+    name: catty-app-data
+  postgres_data:
+    name: catty-postgres-data

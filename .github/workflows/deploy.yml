@@ -1,0 +1,113 @@
+name: CD - Deploy to Production - Docker Compose
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: aaliin/catty-reminders-app
+  CONTAINER_NAME: catty-app
+  PORT: 8181
+  APP_DOMAIN: app.shavarina.course.prafdin.ru
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy app to remote server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: course.prafdin.ru
+          port: 2469
+          username: user
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "=== Starting Docker Compose Deployment ==="
+            
+            echo "Docker Compose version:"
+            docker compose version
+            
+            echo "Setting up project directory..."
+            PROJECT_DIR="/opt/catty-app"
+            sudo mkdir -p $PROJECT_DIR
+            sudo chown $USER:$USER $PROJECT_DIR
+            cd $PROJECT_DIR
+            
+            echo "Logging into GitHub Container Registry..."
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u '${{ github.actor }}' --password-stdin
+            
+            echo "Downloading docker-compose.yaml..."
+            curl -s -o docker-compose.yaml \
+              "https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yaml"
+
+            echo "Stopping previous deployment..."
+            docker compose down || true
+            
+            echo "Pulling latest Docker image..."
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            
+            echo "Starting application with Docker Compose..."
+            docker compose up -d
+            
+            echo "Verifying no bind mounts are used..."
+            echo "Container mount points:"
+            docker inspect catty-app --format='{{range .Mounts}}{{.Source}} -> {{.Destination}} ({{.Type}})\n{{end}}' | grep -v volume || echo "No bind mounts found - good!"
+            sleep 20
+            
+            echo "Checking container status..."
+            docker compose ps
+            
+            echo "Performing health check..."
+            if curl -f http://localhost:${{ env.PORT }}/health; then
+              echo "Health check PASSED - Application is running correctly"
+              echo "DEPLOYMENT SUCCESSFUL!"
+              echo "========================================"
+              echo "Application URL: http://${{ env.APP_DOMAIN }}"
+              echo "Local URL: http://localhost:${{ env.PORT }}"
+              echo "Container: ${{ env.CONTAINER_NAME }}"
+              echo "========================================"
+            else
+              echo "Health check FAILED - Application is not responding"
+              echo "=== Debug Information ==="
+              echo "Container logs:"
+              docker compose logs
+              echo "Container status:"
+              docker compose ps -a
+              exit 1
+            fi
+            
+            echo " Checking database..."
+            if docker compose exec -T db mysqladmin ping -h localhost; then
+              echo "Database health check PASSED"
+            else
+              echo "Database health check FAILED"
+              docker compose logs db
+              exit 1
+            fi
