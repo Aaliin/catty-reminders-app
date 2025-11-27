@@ -27,7 +27,6 @@ jobs:
 
             cd /home/user/catty-reminders-app
             git checkout github-actions
-            git fetch origin
             git pull origin github-actions
 
             source venv/bin/activate
