@@ -10,6 +10,7 @@ env:
   IMAGE_NAME: aaliin/catty-reminders-app
   CONTAINER_NAME: catty-app
   PORT: 8181
+  APP_DOMAIN: app.shavarina.course.prafdin.ru
 
 jobs:
   deploy:
@@ -73,7 +74,7 @@ jobs:
               --name ${{ env.CONTAINER_NAME }} \
               --restart unless-stopped \
               -p ${{ env.PORT }}:${{ env.PORT }} \
-              -e ENVIRONMENT=production \
+              -e APP_DOMAIN="${{ env.APP_DOMAIN }}" \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             
             echo "Cleaning up unused Docker images..."
@@ -99,7 +100,7 @@ jobs:
 
               echo "DEPLOYMENT SUCCESSFUL"
               echo "========================================"
-              echo "Application: http://app.${{ github.repository_owner }}.proxy"
+              echo "Application: http://${{ env.APP_DOMAIN }}/"
               echo "Container: ${{ env.CONTAINER_NAME }}"
               echo "Port: ${{ env.PORT }}"
               echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
