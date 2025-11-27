@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir uvicorn==0.24.0
 RUN pip install --no-cache-dir PyJWT==2.7.0
 
 COPY app/ ./app/
+COPY config.json .
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8181"]
 
