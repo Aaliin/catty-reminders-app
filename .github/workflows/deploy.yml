@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: github-actions
 
       - name: Deploy app to remote server
         uses: appleboy/ssh-action@v0.1.10
@@ -27,7 +29,6 @@ jobs:
             git fetch origin
             git pull origin github-actions
 
-            echo "Installing Python dependencies..."
             source venv/bin/activate
 
             PID=$(lsof -ti:8181) || true
