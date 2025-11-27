@@ -15,6 +15,8 @@ RUN pip install --no-cache-dir \
     mysql-connector-python==8.0.33 \
     "uvicorn[standard]==0.22.0"
 
+RUN apk del .build-deps
+
 COPY app/ ./app/
 COPY config.json .
 COPY templates/ ./templates/

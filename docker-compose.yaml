@@ -40,9 +40,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: 
-        - "CMD-SHELL"
-        - "mysqladmin ping -u root -proot_password"
+      test: ["CMD-SHELL", "mysqladmin ping -u root -proot_password || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
