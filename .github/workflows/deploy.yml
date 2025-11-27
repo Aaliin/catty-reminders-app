@@ -26,8 +26,9 @@ jobs:
             echo "Starting application deployment..."
 
             cd /home/user/catty-reminders-app
+            git checkout github-actions
             git fetch origin
-            git reset --hard origin/github-actions
+            git pull origin github-actions
 
             pkill -f "uvicorn app.main:app" || true
             sleep 2
