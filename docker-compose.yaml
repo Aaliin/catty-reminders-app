@@ -42,6 +42,4 @@ services:
 
 volumes:
   app_data:
-    name: catty-app-data
-  postgres_data:
-    name: catty-postgres-data
+  mysql_data:
