@@ -14,7 +14,8 @@ services:
       - PYTHONPATH=/app
       - ENVIRONMENT=production
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8181/health"]
       interval: 30s
@@ -32,10 +33,16 @@ services:
       - MYSQL_USER=catty_user
       - MYSQL_PASSWORD=catty_password
       - MYSQL_ROOT_PASSWORD=root_password
+      - MYSQL_ALLOW_EMPTY_PASSWORD=no
+    command: 
+      - --default-authentication-plugin=mysql_native_password
+      - --innodb-use-native-aio=0
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: 
+        - "CMD-SHELL"
+        - "mysqladmin ping -u root -proot_password"
       interval: 10s
       timeout: 5s
       retries: 5

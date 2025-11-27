@@ -3,7 +3,7 @@ FROM python:3.11-alpine
 WORKDIR /app
 RUN apk add --no-cache mariadb-connector-c-dev \
     && apk add --no-cache --virtual .build-deps gcc musl-dev
-    
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir \
     fastapi==0.100.0 \
@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir \
     python-multipart==0.0.6 \
     requests==2.31.0 \
     tinydb==4.8.0 \
+    mysql-connector-python==8.0.33 \
     "uvicorn[standard]==0.22.0"
 
 COPY app/ ./app/
