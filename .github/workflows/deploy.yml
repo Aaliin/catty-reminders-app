@@ -57,9 +57,8 @@ jobs:
             docker compose version
             
             echo "Setting up project directory..."
-            PROJECT_DIR="/opt/catty-app"
-            sudo mkdir -p $PROJECT_DIR
-            sudo chown $USER:$USER $PROJECT_DIR
+            PROJECT_DIR="/home/user/catty-app"
+            mkdir -p $PROJECT_DIR
             cd $PROJECT_DIR
 
             echo "Creating docker-compose.yaml..."
@@ -103,8 +102,17 @@ jobs:
             docker compose pull --quiet
             
             echo "Starting application with Docker Compose..."
-            docker compose up -d --force-recreate
+            docker compose up db -d --force-recreate
             sleep 20
+      
+            echo "Checking database status..."
+            docker compose ps db
+            
+            echo "Starting application..."
+            docker compose up app -d
+            
+            echo "Waiting for application to start..."
+            sleep 30
             
             echo "Checking container status..."
             docker compose ps 
