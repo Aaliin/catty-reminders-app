@@ -53,9 +53,6 @@ jobs:
           script: |
             echo "=== Starting Docker Compose Deployment ==="
             
-            echo "Docker Compose version:"
-            docker compose version
-            
             echo "Setting up project directory..."
             PROJECT_DIR="/home/user/catty-app"
             mkdir -p $PROJECT_DIR
@@ -87,22 +84,18 @@ jobs:
             fi
             
             echo "Logging into GitHub Container Registry..."
-            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u '${{ github.actor }}' --password-stdin
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u '${{ github.actor }}' --password-stdin > /dev/null 2>&1
             
-            echo "Stopping any containers with conflicting names..."
-            docker rm -f ${{ env.CONTAINER_NAME }} catty-db || true
-            
-            echo "Stopping Docker Compose services..."
-            docker compose down --remove-orphans || true
-            
-            echo "Cleaning up unused networks..."
-            docker network prune -f || true
-            
+            echo "Cleaning up previous deployment..."
+            docker compose down --remove-orphans --timeout 30 2>/dev/null || true
+            docker rm -f ${{ env.CONTAINER_NAME }} catty-db 2>/dev/null || true
+            docker network prune -f 2>/dev/null || true
+                        
             echo "Pulling latest Docker image..."
             docker compose pull --quiet
             
             echo "Starting application with Docker Compose..."
-            docker compose up db -d --force-recreate
+            timeout 120 docker compose up db -d --force-recreate
             sleep 20
       
             echo "Checking database status..."
