@@ -87,25 +87,15 @@ jobs:
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u '${{ github.actor }}' --password-stdin > /dev/null 2>&1
             
             echo "Cleaning up previous deployment..."
-            docker compose down --remove-orphans --timeout 30 2>/dev/null || true
-            docker rm -f ${{ env.CONTAINER_NAME }} catty-db 2>/dev/null || true
-            docker network prune -f 2>/dev/null || true
+            docker compose down --remove-orphans 2>/dev/null || true
+            docker rm -f ${{ env.CONTAINER_NAME }} 2>/dev/null || true
                         
             echo "Pulling latest Docker image..."
             docker compose pull --quiet
             
             echo "Starting application with Docker Compose..."
-            timeout 120 docker compose up db -d --force-recreate
+            docker compose up -d 2>/dev/null || true
             sleep 20
-      
-            echo "Checking database status..."
-            docker compose ps db
-            
-            echo "Starting application..."
-            docker compose up app -d
-            
-            echo "Waiting for application to start..."
-            sleep 30
             
             echo "Checking container status..."
             docker compose ps 
