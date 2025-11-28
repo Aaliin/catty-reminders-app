@@ -1,7 +1,5 @@
 name: catty-reminders
 
-version: '3.8'
-
 services:
   app:
     image: ghcr.io/aaliin/catty-reminders-app:latest

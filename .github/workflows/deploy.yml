@@ -106,7 +106,7 @@ jobs:
             
             echo "Checking container status..."
             docker compose ps 
-            curl -f http://${{ env.APP_DOMAIN }}/login || echo "⚠️ Application might be starting..."
+            curl -f http://${{ env.APP_DOMAIN }}/login || echo "Application might be starting..."
             
             echo "Performing health check..."
             if curl -f -s http://localhost:${{ env.PORT }}/health; then
