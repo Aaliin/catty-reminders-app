@@ -84,17 +84,20 @@ jobs:
             fi
             
             echo "Logging into GitHub Container Registry..."
-            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u '${{ github.actor }}' --password-stdin > /dev/null 2>&1
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ${{ env.REGISTRY }} -u '${{ github.actor }}' --password-stdin
             
-            echo "Cleaning up previous deployment..."
-            docker compose down --remove-orphans 2>/dev/null || true
-            docker rm -f ${{ env.CONTAINER_NAME }} 2>/dev/null || true
-                        
+            echo "Stopping previous deployment..."
+            docker compose down || true
+            
             echo "Pulling latest Docker image..."
-            docker compose pull --quiet
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest > /dev/null 2>&1
             
             echo "Starting application with Docker Compose..."
-            docker compose up -d 2>/dev/null || true
+            docker compose up -d --quiet-pull
+            
+            echo "Verifying no bind mounts are used..."
+            echo "Container mount points:"
+            docker inspect catty-app --format='{{range .Mounts}}{{.Source}} -> {{.Destination}} ({{.Type}})\n{{end}}' | grep -v volume || echo "No bind mounts found - good!"
             sleep 20
             
             echo "Checking container status..."
